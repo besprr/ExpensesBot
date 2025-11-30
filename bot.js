@@ -7,16 +7,15 @@ const bot = new Telegraf(process.env.BOT_TOKEN)
 const db = new sqlite3.Database('./finance.db')
 
 const ALLOWED_USERS = [
-	586995184, // Маша
-	1319991227, // Кирилл
+	586995184, 
+	1319991227, 
 ]
 
-// Функция проверки доступа
+
 function isUserAllowed(ctx) {
 	const userId = ctx.from.id
 	const chatId = ctx.chat.id
 
-	// Разрешаем если пользователь в списке разрешенных
 	const isAllowed =
 		ALLOWED_USERS.includes(userId) || ALLOWED_USERS.includes(chatId)
 
@@ -27,7 +26,6 @@ function isUserAllowed(ctx) {
 	return isAllowed
 }
 
-// Middleware для проверки доступа
 bot.use((ctx, next) => {
 	if (!isUserAllowed(ctx)) {
 		ctx.reply(
@@ -35,12 +33,12 @@ bot.use((ctx, next) => {
 				'Это приватный бот для учета расходов. ' +
 				'Если вы должны иметь доступ, обратитесь к администратору.'
 		)
-		return // Прерываем выполнение
+		return
 	}
 	return next()
 })
 
-// Создаем таблицы
+
 db.serialize(() => {
 	db.run(`
     CREATE TABLE IF NOT EXISTS expenses (
@@ -54,18 +52,15 @@ db.serialize(() => {
   `)
 })
 
-// Функция для правильного парсинга чисел
 function parseAmount(amountStr) {
 	const cleaned = amountStr.replace(',', '.').replace(/\s/g, '')
 	return parseFloat(cleaned)
 }
 
-// Функция для форматирования чисел (2 знака после запятой)
 function formatAmount(amount) {
 	return parseFloat(amount).toFixed(2)
 }
 
-// Главное меню
 function getMainMenu() {
 	return Markup.keyboard([
 		['📊 Статистика', '📋 Отчёт'],
@@ -74,7 +69,6 @@ function getMainMenu() {
 	]).resize()
 }
 
-// Меню редактирования
 function getEditMenu(expenseId) {
 	return Markup.inlineKeyboard([
 		[
@@ -85,7 +79,6 @@ function getEditMenu(expenseId) {
 	])
 }
 
-// Команда /start с кнопками
 bot.start(ctx => {
 	const userName = ctx.from.first_name || 'Пользователь'
 
@@ -97,12 +90,10 @@ bot.start(ctx => {
 	)
 })
 
-// Команда сброса меню
 bot.hears('🔄 Сбросить меню', ctx => {
 	ctx.reply('Меню сброшено. Используйте /start для показа кнопок.')
 })
 
-// Добавление траты
 bot.hears('💸 Добавить трату', ctx => {
 	ctx.reply(
 		'Введите трату в формате:\n\n' +
@@ -115,7 +106,6 @@ bot.hears('💸 Добавить трату', ctx => {
 	)
 })
 
-// Статистика
 bot.hears('📊 Статистика', ctx => {
 	const chatId = ctx.chat.id
 
@@ -156,7 +146,6 @@ bot.hears('📊 Статистика', ctx => {
 	)
 })
 
-// Полный отчёт
 bot.hears('📋 Отчёт', ctx => {
 	const chatId = ctx.chat.id
 
@@ -202,7 +191,6 @@ bot.hears('📋 Отчёт', ctx => {
 	)
 })
 
-// Список трат для редактирования
 bot.hears('✏️ Мои траты', ctx => {
 	const chatId = ctx.chat.id
 
@@ -251,7 +239,6 @@ bot.hears('✏️ Мои траты', ctx => {
 	)
 })
 
-// Обработка inline кнопок
 bot.action(/select_(\d+)/, ctx => {
 	const expenseId = ctx.match[1]
 
@@ -276,7 +263,6 @@ bot.action(/select_(\d+)/, ctx => {
 	})
 })
 
-// Редактирование траты
 bot.action(/edit_(\d+)/, ctx => {
 	const expenseId = ctx.match[1]
 	ctx.answerCbQuery()
@@ -297,7 +283,6 @@ bot.action(/edit_(\d+)/, ctx => {
 	ctx.session.editingExpenseId = expenseId
 })
 
-// Удаление траты
 bot.action(/delete_(\d+)/, async ctx => {
 	const expenseId = ctx.match[1]
 
@@ -320,7 +305,6 @@ bot.action(/delete_(\d+)/, async ctx => {
 	})
 })
 
-// Назад к списку
 bot.action('back_to_list', ctx => {
 	ctx.answerCbQuery()
 	const message = {
@@ -332,14 +316,12 @@ bot.action('back_to_list', ctx => {
 	bot.handleUpdate(update)
 })
 
-// Назад в главное меню
 bot.action('back_to_main', ctx => {
 	ctx.answerCbQuery()
 	ctx.deleteMessage()
 	bot.telegram.sendMessage(ctx.chat.id, 'Выберите действие:', getMainMenu())
 })
 
-// Обработка текстовых сообщений
 bot.on('text', ctx => {
 	const text = ctx.message.text
 
@@ -425,12 +407,10 @@ bot.on('text', ctx => {
 	}
 })
 
-// Обработка ошибок
 bot.catch((err, ctx) => {
 	console.error('Error for', ctx.updateType, err)
 })
 
-// Запуск бота
 bot.launch()
 console.log('✅ Бот запущен с приватностью!')
 console.log('✅ Разрешены пользователи:', ALLOWED_USERS)
