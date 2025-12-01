@@ -678,6 +678,12 @@ bot.hears('🗑️ Очистить прошлый месяц', ctx => {
 	})
 })
 
+bot.hears('🔙 Назад', ctx => {
+  ctx.session = {}
+  ctx.deleteMessage().catch(()=>{}) // удаляем текущее сообщение с балансом
+  bot.telegram.sendMessage(ctx.chat.id, 'Выберите действие:', getMainMenu())
+})
+
 // -------------------- Catch & launch --------------------
 
 bot.catch((err, ctx) => {
