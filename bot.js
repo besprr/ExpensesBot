@@ -1,16 +1,22 @@
 const { Telegraf, Markup } = require('telegraf');
 const sqlite3 = require('sqlite3').verbose();
-const path = require('path');
 require('dotenv').config();
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 const db = new sqlite3.Database('./finance.db');
 
 const ALLOWED_USERS = [
-  586995184,    
-  1319991227,   
+  586995184,    // Маша
+  1319991227,   // Кирилл
 ];
 
+// Инициализация сессии
+bot.use((ctx, next) => {
+  ctx.session = ctx.session || {};
+  return next();
+});
+
+// Функция проверки доступа
 function isUserAllowed(ctx) {
   const userId = ctx.from.id;
   const chatId = ctx.chat.id;
@@ -24,6 +30,7 @@ function isUserAllowed(ctx) {
   return isAllowed;
 }
 
+// Middleware для проверки доступа
 bot.use((ctx, next) => {
   if (!isUserAllowed(ctx)) {
     ctx.reply(
@@ -36,7 +43,9 @@ bot.use((ctx, next) => {
   return next();
 });
 
+// Создаем таблицы
 db.serialize(() => {
+  // Расходы
   db.run(`
     CREATE TABLE IF NOT EXISTS expenses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -49,6 +58,7 @@ db.serialize(() => {
     )
   `);
   
+  // Доходы
   db.run(`
     CREATE TABLE IF NOT EXISTS incomes (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,20 +72,23 @@ db.serialize(() => {
   `);
 });
 
+// Функция для правильного парсинга чисел
 function parseAmount(amountStr) {
   const cleaned = amountStr.replace(',', '.').replace(/\s/g, '');
   return parseFloat(cleaned);
 }
 
+// Функция для форматирования чисел (2 знака после запятой)
 function formatAmount(amount) {
   return parseFloat(amount).toFixed(2);
 }
 
+// Функция для удаления данных старше месяца+5 дней
 function cleanupOldData() {
   const currentDate = new Date();
   const oneMonthAgo = new Date(currentDate);
   oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
-  oneMonthAgo.setDate(oneMonthAgo.getDate() - 5); 
+  oneMonthAgo.setDate(oneMonthAgo.getDate() - 5);
   
   const formattedDate = oneMonthAgo.toISOString().split('T')[0];
   
@@ -96,9 +109,12 @@ function cleanupOldData() {
   });
 }
 
+// Запускаем очистку при старте
 cleanupOldData();
+// И каждые 24 часа
 setInterval(cleanupOldData, 24 * 60 * 60 * 1000);
 
+// Главное меню
 function getMainMenu() {
   return Markup.keyboard([
     ['📊 Статистика', '📋 Отчёт'],
@@ -108,15 +124,7 @@ function getMainMenu() {
   ]).resize();
 }
 
-function getTypeMenu() {
-  return Markup.inlineKeyboard([
-    [
-      Markup.button.callback('📥 Расход', 'type_expense'),
-      Markup.button.callback('📤 Доход', 'type_income')
-    ]
-  ]);
-}
-
+// Меню редактирования
 function getEditMenu(recordId, type) {
   return Markup.inlineKeyboard([
     [
@@ -127,6 +135,9 @@ function getEditMenu(recordId, type) {
   ]);
 }
 
+// ==================== ОБРАБОТЧИКИ КОМАНД ====================
+
+// Команда /start с кнопками
 bot.start((ctx) => {
   const userName = ctx.from.first_name || 'Пользователь';
   
@@ -144,12 +155,14 @@ bot.start((ctx) => {
   );
 });
 
+// Команда сброса меню
 bot.hears('🔄 Сбросить меню', (ctx) => {
   ctx.reply('Меню сброшено. Используйте /start для показа кнопок.');
 });
 
+// ==================== ДОБАВЛЕНИЕ РАСХОДА ====================
+
 bot.hears('💸 Добавить расход', (ctx) => {
-  ctx.session = ctx.session || {};
   ctx.session.entryType = 'expense';
   ctx.session.entryStep = 'waiting_date';
   
@@ -161,8 +174,9 @@ bot.hears('💸 Добавить расход', (ctx) => {
   );
 });
 
+// ==================== ДОБАВЛЕНИЕ ДОХОДА ====================
+
 bot.hears('💰 Добавить доход', (ctx) => {
-  ctx.session = ctx.session || {};
   ctx.session.entryType = 'income';
   ctx.session.entryStep = 'waiting_date';
   
@@ -174,9 +188,12 @@ bot.hears('💰 Добавить доход', (ctx) => {
   );
 });
 
+// ==================== СТАТИСТИКА ====================
+
 bot.hears('📊 Статистика', (ctx) => {
   const chatId = ctx.chat.id;
   
+  // Получаем расходы
   db.all(`
     SELECT who, SUM(amount) as total, COUNT(*) as count 
     FROM expenses 
@@ -187,6 +204,7 @@ bot.hears('📊 Статистика', (ctx) => {
       return;
     }
     
+    // Получаем доходы
     db.all(`
       SELECT who, SUM(amount) as total, COUNT(*) as count 
       FROM incomes 
@@ -199,6 +217,7 @@ bot.hears('📊 Статистика', (ctx) => {
       
       let response = '📊 <b>Общая статистика:</b>\n\n';
       
+      // Доходы
       response += '📤 <b>Доходы:</b>\n';
       let totalIncome = 0;
       let incomeCount = 0;
@@ -237,6 +256,8 @@ bot.hears('📊 Статистика', (ctx) => {
     });
   });
 });
+
+// ==================== ОТЧЕТ ====================
 
 bot.hears('📋 Отчёт', (ctx) => {
   const chatId = ctx.chat.id;
@@ -307,6 +328,8 @@ bot.hears('📋 Отчёт', (ctx) => {
   });
 });
 
+// ==================== МОИ ЗАПИСИ ====================
+
 bot.hears('✏️ Мои записи', (ctx) => {
   const chatId = ctx.chat.id;
   
@@ -366,11 +389,16 @@ bot.hears('✏️ Мои записи', (ctx) => {
   });
 });
 
+// ==================== ОЧИСТКА ====================
+
 bot.hears('🗑️ Очистить старые', (ctx) => {
   cleanupOldData();
   ctx.reply('✅ Старые данные (старше месяца+5 дней) удалены!');
 });
 
+// ==================== INLINE КНОПКИ ====================
+
+// Выбор записи для редактирования
 bot.action(/select_(expense|income)_(\d+)/, (ctx) => {
   const type = ctx.match[1];
   const recordId = ctx.match[2];
@@ -400,6 +428,7 @@ bot.action(/select_(expense|income)_(\d+)/, (ctx) => {
   });
 });
 
+// Редактирование записи
 bot.action(/edit_(expense|income)_(\d+)/, (ctx) => {
   const type = ctx.match[1];
   const recordId = ctx.match[2];
@@ -419,11 +448,11 @@ bot.action(/edit_(expense|income)_(\d+)/, (ctx) => {
     }
   );
   
-  ctx.session = ctx.session || {};
   ctx.session.editingRecordId = recordId;
   ctx.session.editingType = type;
 });
 
+// Удаление записи
 bot.action(/delete_(expense|income)_(\d+)/, async (ctx) => {
   const type = ctx.match[1];
   const recordId = ctx.match[2];
@@ -448,6 +477,7 @@ bot.action(/delete_(expense|income)_(\d+)/, async (ctx) => {
   });
 });
 
+// Назад к списку
 bot.action('back_to_list', (ctx) => {
   ctx.answerCbQuery();
   const message = { 
@@ -459,22 +489,27 @@ bot.action('back_to_list', (ctx) => {
   bot.handleUpdate(update);
 });
 
+// Назад в главное меню
 bot.action('back_to_main', (ctx) => {
   ctx.answerCbQuery();
   ctx.deleteMessage();
   bot.telegram.sendMessage(ctx.chat.id, 'Выберите действие:', getMainMenu());
 });
 
+// ==================== ОБРАБОТКА ТЕКСТА ====================
+
 bot.on('text', (ctx) => {
   const text = ctx.message.text;
   
+  // Пропускаем команды меню
   if (['📊 Статистика', '📋 Отчёт', '💸 Добавить расход', '💰 Добавить доход', 
        '✏️ Мои записи', '🗑️ Очистить старые', '🔄 Сбросить меню'].includes(text)) {
     return;
   }
   
-  const session = ctx.session || {};
+  const session = ctx.session;
   
+  // Если редактируем существующую запись
   if (session.editingRecordId && session.editingType) {
     if (text.includes('|')) {
       const parts = text.split('|').map(p => p.trim());
@@ -510,9 +545,11 @@ bot.on('text', (ctx) => {
     return;
   }
   
+  // Многошаговый ввод новой записи
   if (session.entryType && session.entryStep) {
     switch(session.entryStep) {
       case 'waiting_date':
+        // Проверяем формат даты ДД.ММ.ГГГГ
         if (/^\d{2}\.\d{2}\.\d{4}$/.test(text)) {
           ctx.session.entryDate = text;
           ctx.session.entryStep = 'waiting_description';
@@ -579,6 +616,7 @@ bot.on('text', (ctx) => {
           }
         );
         
+        // Очищаем сессию
         delete ctx.session.entryType;
         delete ctx.session.entryStep;
         delete ctx.session.entryDate;
@@ -589,6 +627,7 @@ bot.on('text', (ctx) => {
     return;
   }
   
+  // Старый формат ввода (для обратной совместимости)
   if (text.includes('|')) {
     const parts = text.split('|').map(p => p.trim());
     if (parts.length === 4) {
@@ -596,6 +635,7 @@ bot.on('text', (ctx) => {
       const amountNum = parseAmount(amount);
       
       if (!isNaN(amountNum) && amountNum > 0) {
+        // По умолчанию считаем расходом
         db.run(
           'INSERT INTO expenses (date, description, amount, who) VALUES (?, ?, ?, ?)',
           [date, desc, amountNum, who],
@@ -620,6 +660,7 @@ bot.on('text', (ctx) => {
       ctx.reply('❌ Неверный формат. Используйте: Дата | Описание | Сумма | Кто');
     }
   } else {
+    // Если сообщение не распознано
     ctx.reply(
       '🤔 Не понял ваше сообщение.\n\n' +
       'Выберите действие из меню или используйте формат:\n' +
@@ -630,20 +671,44 @@ bot.on('text', (ctx) => {
   }
 });
 
+// Обработка ошибок
 bot.catch((err, ctx) => {
   console.error('Error for', ctx.updateType, err);
 });
 
-bot.launch();
-console.log('✅ Бот запущен с улучшениями!');
-console.log('✅ Разрешены пользователи:', ALLOWED_USERS);
-console.log('✅ Автоматическая очистка настроена');
+// ==================== ЗАПУСК НА RAILWAY ====================
 
+const PORT = process.env.PORT || 3000;
+const http = require('http');
+
+// Создаем HTTP сервер для Railway
+const server = http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Finance Bot is running on Railway!');
+});
+
+server.listen(PORT, () => {
+  console.log(`🚀 HTTP Server running on port ${PORT}`);
+});
+
+// Запускаем бота
+bot.launch().then(() => {
+  console.log('✅ Бот запущен на Railway!');
+  console.log('✅ Разрешены пользователи:', ALLOWED_USERS);
+  console.log('✅ Автоматическая очистка настроена');
+}).catch(err => {
+  console.error('❌ Ошибка запуска бота:', err);
+});
+
+// Корректное завершение
 process.once('SIGINT', () => {
   db.close();
   bot.stop('SIGINT');
+  server.close();
 });
+
 process.once('SIGTERM', () => {
   db.close();
   bot.stop('SIGTERM');
+  server.close();
 });
