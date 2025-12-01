@@ -311,9 +311,10 @@ bot.hears('📊 Статистика', ctx => {
 bot.hears('📈 Баланс', ctx => {
 	ctx.reply(
 		'Выберите период:',
-		Markup.keyboard([['📅 Текущий месяц', '📅 Прошлый месяц'], ['🔙 Назад']], {
-			resize_keyboard: true,
-		})
+		Markup.keyboard([
+			['📅 Текущий месяц', '📅 Прошлый месяц'],
+			['🔙 Назад'],
+		]).resize()
 	)
 })
 
@@ -345,58 +346,25 @@ bot.hears(['📅 Текущий месяц', '📅 Прошлый месяц'], 
 	if (ctx.message.text === '📅 Прошлый месяц') offset = -1
 	const { year, month } = monthBoundsFromNow(offset)
 	const pattern = monthPattern(month, year)
-	// получаем суммарно доходы и расходы за этот месяц
-	db.get(
-		`SELECT SUM(amount) as total FROM incomes WHERE date LIKE ?`,
-		[pattern],
-		(err, incRow) => {
-			if (err) {
-				ctx.reply('❌ Ошибка получения доходов')
-				return
-			}
-			db.get(
-				`SELECT SUM(amount) as total FROM expenses WHERE date LIKE ?`,
-				[pattern],
-				(err2, expRow) => {
-					if (err2) {
-						ctx.reply('❌ Ошибка получения расходов')
-						return
-					}
-					const inc = parseFloat(incRow && incRow.total) || 0
-					const exp = parseFloat(expRow && expRow.total) || 0
-					const bal = inc - exp
-					const title =
-						ctx.message.text === '📅 Текущий месяц'
-							? 'Текущий месяц'
-							: 'Прошлый месяц'
-					let resp = `📊 <b>Баланс — ${title} (${String(month).padStart(
-						2,
-						'0'
-					)}.${year}):</b>\n\n`
-					resp += `📤 Доходы: ${formatAmount(inc)} руб.\n`
-					resp += `📥 Расходы: ${formatAmount(exp)} руб.\n`
-					resp += `💰 Баланс: ${formatAmount(bal)} руб.\n\n`
-					resp += `Хотите график (по дням) или экспорт CSV?`
-					// Меняем клавиатуру на inline-кнопки
-					ctx.reply(resp, {
-						parse_mode: 'HTML',
-						...Markup.inlineKeyboard([
-							[
-								Markup.button.callback(
-									'📈 Показать график',
-									'show_chart_current'
-								),
-							],
-							[Markup.button.callback('⬅️ Назад в меню', 'back_to_main')], // <-- Новая inline-кнопка
-						]),
-					})
-					// сохраняем в сессию выбранный месяц для экспорта/графика
-					ctx.session = ctx.session || {}
-					ctx.session.last_selected_month = { month, year }
-				}
-			)
-		}
-	)
+	db.get(`SELECT SUM(amount) as total FROM incomes WHERE date LIKE ?`, [pattern], (err, incRow) => {
+		if (err) { ctx.reply('❌ Ошибка получения доходов'); return }
+		db.get(`SELECT SUM(amount) as total FROM expenses WHERE date LIKE ?`, [pattern], (err2, expRow) => {
+			if (err2) { ctx.reply('❌ Ошибка получения расходов'); return }
+			const inc = parseFloat(incRow && incRow.total) || 0
+			const exp = parseFloat(expRow && expRow.total) || 0
+			const bal = inc - exp
+			const title = ctx.message.text === '📅 Текущий месяц' ? 'Текущий месяц' : 'Прошлый месяц'
+			let resp = `📊 <b>Баланс — ${title} (${String(month).padStart(2,'0')}.${year}):</b>\n\n`
+			resp += `📤 Доходы: ${formatAmount(inc)} руб.\n`
+			resp += `📥 Расходы: ${formatAmount(exp)} руб.\n`
+			resp += `💰 Баланс: ${formatAmount(bal)} руб.\n\n`
+			resp += `Хотите график (по дням) или экспорт CSV?`
+			// Упрощаем - только одна кнопка "Назад"
+			ctx.reply(resp, Markup.keyboard([['🔙 Назад']]).resize())
+			ctx.session = ctx.session || {}
+			ctx.session.last_selected_month = { month, year }
+		})
+	})
 })
 
 // Показать график (используем QuickChart)
@@ -470,10 +438,10 @@ bot.hears('📈 Показать график', ctx => {
 							scales: { yAxes: [{ ticks: { beginAtZero: true } }] },
 						},
 					}
-					const qc = 'https://quickchart.io/chart?'
+					const qc = 'https://quickchart.io/chart'
 					const url =
 						qc +
-						'c=' +
+						'?c=' +
 						encodeURIComponent(JSON.stringify(chartConfig)) +
 						'&w=800&h=400'
 					ctx.replyWithPhoto({ url })
@@ -705,14 +673,10 @@ bot.action('back_to_list', ctx => {
 })
 
 bot.action('back_to_main', ctx => {
-	ctx.answerCbQuery() // подтверждаем нажатие
+	ctx.answerCbQuery()
+	ctx.deleteMessage().catch(()=>{})
 	ctx.session = {}
-	try {
-		ctx.editMessageText('Выберите действие:', getMainMenu())
-	} catch (e) {
-		// если не удалось отредактировать (например, сообщение устарело), отправим новое
-		ctx.reply('Выберите действие:', getMainMenu())
-	}
+	ctx.reply('Главное меню:', getMainMenu())
 })
 
 // -------------------- Text input handling --------------------
@@ -876,11 +840,12 @@ bot.hears('🗑️ Очистить прошлый месяц', ctx => {
 	})
 })
 
-// Обработчик для кнопки "Назад", которая может появляться в разных контекстах
 bot.hears('🔙 Назад', ctx => {
-	ctx.session = {}
-	ctx.deleteMessage().catch(() => {}) // удаляем текущее сообщение, если возможно
-	ctx.reply('Выберите действие:', getMainMenu())
+	ctx.session = ctx.session || {}
+	ctx.session.mode = null
+	ctx.session.editing = null
+	ctx.session.last_selected_month = null
+	ctx.reply('Главное меню:', getMainMenu())
 })
 
 // -------------------- Catch & launch --------------------
