@@ -60,7 +60,7 @@ function getMainMenu() {
 		['📊 Статистика', '📋 Отчёт'],
 		['💸 Добавить трату', '💰 Добавить доход'],
 		['✏️ Мои траты', '🗂️ Мои доходы'],
-		['📈 Баланс', '📤 Экспорт CSV'],
+		['📈 Баланс'],
 		['📅 Текущий месяц', '📅 Прошлый месяц'],
 		['🗑️ Очистить прошлый месяц', '🔄 Сбросить меню'],
 	]).resize()
@@ -331,7 +331,7 @@ bot.hears(['📅 Текущий месяц', '📅 Прошлый месяц'], 
 			resp += `📥 Расходы: ${formatAmount(exp)} руб.\n`
 			resp += `💰 Баланс: ${formatAmount(bal)} руб.\n\n`
 			resp += `Хотите график (по дням) или экспорт CSV?`
-			ctx.reply(resp, Markup.keyboard([['📈 Показать график'], ['📤 Экспорт CSV'], ['🔙 Назад']], { resize_keyboard: true, parse_mode: 'HTML' }))
+			ctx.reply(resp, Markup.keyboard([['📈 Показать график'], ['🔙 Назад']], { resize_keyboard: true, parse_mode: 'HTML' }))
 			// сохраняем в сессию выбранный месяц для экспорта/графика
 			ctx.session = ctx.session || {}
 			ctx.session.last_selected_month = { month, year }
@@ -577,7 +577,7 @@ bot.on('text', ctx => {
 	const skip = [
 		'📊 Статистика','📋 Отчёт','💸 Добавить трату','✏️ Мои траты','🔄 Сбросить меню',
 		'💰 Добавить доход','✏️ Мои траты','🗂️ Мои доходы','📈 Баланс',
-		'📅 Текущий месяц','📅 Прошлый месяц','📈 Показать график','📤 Экспорт CSV',
+		'📅 Текущий месяц','📅 Прошлый месяц','📈 Показать график',
 		'🗑️ Очистить прошлый месяц','🔙 Назад','🔄 Сбросить меню'
 	]
 	if (skip.includes(text)) return
@@ -676,48 +676,6 @@ bot.hears('🗑️ Очистить прошлый месяц', ctx => {
 			ctx.reply(`✅ Удалены записи за ${mStr}.${prevYear}\nРасходов: ${expDeleted}\nДоходов: ${incDeleted}`)
 		})
 	})
-})
-
-// -------------------- Export CSV --------------------
-
-bot.hears('📤 Экспорт CSV', ctx => {
-	// экспорт за последний выбранный месяц (или текущий)
-	const sel = (ctx.session && ctx.session.last_selected_month) || monthBoundsFromNow(0)
-	const month = sel.month
-	const year = sel.year
-	const pat = monthPattern(month, year)
-
-	const rows = []
-	function doExport() {
-		// query expenses then incomes
-		db.all('SELECT date, description, amount, who, category FROM expenses WHERE date LIKE ? ORDER BY date', [pat], (err, expRows) => {
-			if (err) { ctx.reply('❌ Ошибка при сборе расходов'); return }
-			db.all('SELECT date, description, amount, who, category FROM incomes WHERE date LIKE ? ORDER BY date', [pat], (err2, incRows) => {
-				if (err2) { ctx.reply('❌ Ошибка при сборе доходов'); return }
-				// build CSV
-				let csv = 'type,date,description,amount,who,category\n'
-				;(incRows || []).forEach(r => {
-					csv += `income,"${r.date}","${r.description.replace(/"/g,'""')}",${r.amount},"${(r.who||'').replace(/"/g,'""')}","${(r.category||'').replace(/"/g,'""')}"\n`
-				})
-				;(expRows || []).forEach(r => {
-					csv += `expense,"${r.date}","${r.description.replace(/"/g,'""')}",${r.amount},"${(r.who||'').replace(/"/g,'""')}","${(r.category||'').replace(/"/g,'""')}"\n`
-				})
-				// write file
-				const filename = `finance_export_${String(month).padStart(2,'0')}_${year}.csv`
-				const filepath = path.join(os.tmpdir(), filename)
-				fs.writeFile(filepath, csv, (err) => {
-					if (err) { ctx.reply('❌ Ошибка при создании файла'); console.error(err); return }
-					ctx.replyWithDocument({ source: filepath, filename }).then(()=> {
-						// optional cleanup
-						fs.unlink(filepath, ()=>{})
-					}).catch(e => {
-						ctx.reply('❌ Ошибка отправки файла: ' + e.message)
-					})
-				})
-			})
-		})
-	}
-	doExport()
 })
 
 // -------------------- Catch & launch --------------------
