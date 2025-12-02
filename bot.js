@@ -229,11 +229,15 @@ bot.hears('💸 Добавить расход', ctx => {
 			'<code>25.12.2023 | Xbox | 30000.50 | Я</code>\n' +
 			'<code>26.12.2023 | Продукты | 2500,75 | Девушка</code>\n\n' +
 			'После ввода выберите категорию расходов.',
-		{ parse_mode: 'HTML' }
+		{
+			parse_mode: 'HTML',
+			...Markup.removeKeyboard(),
+		}
 	)
 
 	ctx.session = ctx.session || {}
 	ctx.session.waitingForExpense = true
+	ctx.session.waitingForIncome = false
 })
 
 bot.hears('💰 Добавить доход', ctx => {
@@ -244,11 +248,15 @@ bot.hears('💰 Добавить доход', ctx => {
 			'<code>25.12.2023 | Зарплата | 85000 | Я</code>\n' +
 			'<code>26.12.2023 | Продажа компьютера | 45000 | Девушка</code>\n\n' +
 			'💡 <i>Можно использовать точки или запятые для копеек</i>',
-		{ parse_mode: 'HTML' }
+		{
+			parse_mode: 'HTML',
+			...Markup.removeKeyboard(),
+		}
 	)
 
 	ctx.session = ctx.session || {}
 	ctx.session.waitingForIncome = true
+	ctx.session.waitingForExpense = false
 })
 
 bot.hears('📊 Статистика', async ctx => {
@@ -268,6 +276,7 @@ bot.hears('📊 Статистика', async ctx => {
 		[currentMonth.toString().padStart(2, '0'), currentYear],
 		(err, expenseRows) => {
 			if (err) {
+				console.error('Expense stat error:', err)
 				bot.telegram.sendMessage(
 					chatId,
 					'❌ Ошибка при получении статистики расходов'
@@ -284,6 +293,7 @@ bot.hears('📊 Статистика', async ctx => {
 				[currentMonth.toString().padStart(2, '0'), currentYear],
 				(err, incomeRows) => {
 					if (err) {
+						console.error('Income stat error:', err)
 						bot.telegram.sendMessage(
 							chatId,
 							'❌ Ошибка при получении статистики доходов'
@@ -359,7 +369,10 @@ bot.hears('📊 Статистика', async ctx => {
 								})
 							}
 
-							bot.telegram.sendMessage(chatId, response, { parse_mode: 'HTML' })
+							bot.telegram.sendMessage(chatId, response, {
+								parse_mode: 'HTML',
+								...Markup.removeKeyboard(),
+							})
 						}
 					)
 				}
@@ -411,6 +424,7 @@ bot.hears('📋 Отчёт', ctx => {
 		],
 		(err, rows) => {
 			if (err) {
+				console.error('Report error:', err)
 				bot.telegram.sendMessage(chatId, '❌ Ошибка при получении отчёта')
 				return
 			}
@@ -452,7 +466,10 @@ bot.hears('📋 Отчёт', ctx => {
 					bot.telegram.sendMessage(chatId, part, { parse_mode: 'HTML' })
 				)
 			} else {
-				bot.telegram.sendMessage(chatId, response, { parse_mode: 'HTML' })
+				bot.telegram.sendMessage(chatId, response, {
+					parse_mode: 'HTML',
+					...Markup.removeKeyboard(),
+				})
 			}
 		}
 	)
@@ -712,6 +729,8 @@ bot.action(/edit_expense_(\d+)/, ctx => {
 
 	ctx.session = ctx.session || {}
 	ctx.session.editingExpenseId = expenseId
+	ctx.session.waitingForExpense = true
+	ctx.session.waitingForIncome = false
 })
 
 // Редактирование доходов
@@ -732,6 +751,8 @@ bot.action(/edit_income_(\d+)/, ctx => {
 
 	ctx.session = ctx.session || {}
 	ctx.session.editingIncomeId = incomeId
+	ctx.session.waitingForIncome = true
+	ctx.session.waitingForExpense = false
 })
 
 // Удаление расходов
@@ -795,27 +816,10 @@ bot.action('cancel_cleanup', ctx => {
 
 bot.action('back_to_list', ctx => {
 	ctx.answerCbQuery()
-	const message = {
-		text: '✏️ Мои операции',
-		chat: ctx.chat,
-		from: ctx.from,
-	}
-	const update = { message }
-	bot.handleUpdate(update)
+	bot.telegram.sendMessage(ctx.chat.id, 'Выберите действие:', getMainMenu())
 })
 
 bot.action('back_to_operations', ctx => {
-	ctx.answerCbQuery()
-	const message = {
-		text: '✏️ Мои операции',
-		chat: ctx.chat,
-		from: ctx.from,
-	}
-	const update = { message }
-	bot.handleUpdate(update)
-})
-
-bot.action('back_to_main', ctx => {
 	ctx.answerCbQuery()
 	ctx.deleteMessage()
 	bot.telegram.sendMessage(ctx.chat.id, 'Выберите действие:', getMainMenu())
@@ -837,10 +841,12 @@ EXPENSE_CATEGORIES.forEach(category => {
 						ctx.reply(
 							`✅ Расход добавлен!\n${date} | ${desc} | ${formatAmount(
 								amount
-							)} | ${category} | ${who}`
+							)} | ${category} | ${who}`,
+							getMainMenu()
 						)
 					}
 					delete ctx.session.pendingExpense
+					delete ctx.session.waitingForExpense
 				}
 			)
 		} else if (
@@ -861,11 +867,13 @@ EXPENSE_CATEGORIES.forEach(category => {
 						ctx.reply(
 							`✅ Расход обновлен!\n${date} | ${desc} | ${formatAmount(
 								amount
-							)} | ${category} | ${who}`
+							)} | ${category} | ${who}`,
+							getMainMenu()
 						)
 					}
 					delete ctx.session.editingExpenseId
 					delete ctx.session.pendingEditExpense
+					delete ctx.session.waitingForExpense
 				}
 			)
 		}
@@ -873,6 +881,8 @@ EXPENSE_CATEGORIES.forEach(category => {
 })
 
 bot.hears('⬅️ Назад', ctx => {
+	// Очищаем сессию при возврате в меню
+	ctx.session = {}
 	ctx.reply('Выберите действие:', getMainMenu())
 })
 
@@ -880,7 +890,7 @@ bot.hears('⬅️ Назад', ctx => {
 bot.on('text', ctx => {
 	const text = ctx.message.text
 
-	// Пропускаем команды меню
+	// Пропускаем команды меню и категории
 	if (
 		[
 			'📊 Статистика',
@@ -897,8 +907,37 @@ bot.on('text', ctx => {
 		return
 	}
 
+	// Добавление расхода (если нажали кнопку "Добавить расход")
+	if (
+		ctx.session &&
+		ctx.session.waitingForExpense &&
+		!ctx.session.editingExpenseId
+	) {
+		if (text.includes('|')) {
+			const parts = text.split('|').map(p => p.trim())
+			if (parts.length === 4) {
+				const [date, desc, amount, who] = parts
+				const amountNum = parseAmount(amount)
+
+				if (!isNaN(amountNum) && amountNum > 0) {
+					ctx.session.pendingExpense = { date, desc, amount: amountNum, who }
+					ctx.reply('Выберите категорию расхода:', getExpenseCategoryKeyboard())
+					return
+				} else {
+					ctx.reply('❌ Сумма должна быть положительным числом')
+				}
+			}
+		}
+		ctx.reply('❌ Неверный формат. Используйте: Дата | На что | Сумма | Кто')
+		return
+	}
+
 	// Редактирование расхода
-	if (ctx.session && ctx.session.editingExpenseId) {
+	if (
+		ctx.session &&
+		ctx.session.editingExpenseId &&
+		ctx.session.waitingForExpense
+	) {
 		if (text.includes('|')) {
 			const parts = text.split('|').map(p => p.trim())
 			if (parts.length === 4) {
@@ -923,67 +962,12 @@ bot.on('text', ctx => {
 		return
 	}
 
-	// Редактирование дохода
-	if (ctx.session && ctx.session.editingIncomeId) {
-		const expenseId = ctx.session.editingIncomeId
-
-		if (text.includes('|')) {
-			const parts = text.split('|').map(p => p.trim())
-			if (parts.length === 4) {
-				const [date, desc, amount, who] = parts
-				const amountNum = parseAmount(amount)
-
-				if (!isNaN(amountNum) && amountNum > 0) {
-					db.run(
-						'UPDATE incomes SET date = ?, description = ?, amount = ?, who = ? WHERE id = ?',
-						[date, desc, amountNum, who, expenseId],
-						err => {
-							if (err) {
-								ctx.reply('❌ Ошибка обновления: ' + err.message)
-							} else {
-								ctx.reply(
-									`✅ Доход обновлен!\n${date} | ${desc} | ${formatAmount(
-										amountNum
-									)} | ${who}`
-								)
-								delete ctx.session.editingIncomeId
-							}
-						}
-					)
-					return
-				} else {
-					ctx.reply('❌ Сумма должна быть положительным числом')
-				}
-			}
-		}
-		ctx.reply('❌ Неверный формат. Используйте: Дата | Источник | Сумма | Кто')
-		return
-	}
-
-	// Добавление расхода
-	if (ctx.session && ctx.session.waitingForExpense) {
-		if (text.includes('|')) {
-			const parts = text.split('|').map(p => p.trim())
-			if (parts.length === 4) {
-				const [date, desc, amount, who] = parts
-				const amountNum = parseAmount(amount)
-
-				if (!isNaN(amountNum) && amountNum > 0) {
-					ctx.session.pendingExpense = { date, desc, amount: amountNum, who }
-					delete ctx.session.waitingForExpense
-					ctx.reply('Выберите категорию расхода:', getExpenseCategoryKeyboard())
-					return
-				} else {
-					ctx.reply('❌ Сумма должна быть положительным числом')
-				}
-			}
-		}
-		ctx.reply('❌ Неверный формат. Используйте: Дата | На что | Сумма | Кто')
-		return
-	}
-
-	// Добавление дохода
-	if (ctx.session && ctx.session.waitingForIncome) {
+	// Добавление дохода (если нажали кнопку "Добавить доход")
+	if (
+		ctx.session &&
+		ctx.session.waitingForIncome &&
+		!ctx.session.editingIncomeId
+	) {
 		if (text.includes('|')) {
 			const parts = text.split('|').map(p => p.trim())
 			if (parts.length === 4) {
@@ -1001,7 +985,8 @@ bot.on('text', ctx => {
 								ctx.reply(
 									`✅ Доход добавлен!\n${date} | ${desc} | ${formatAmount(
 										amountNum
-									)} | ${who}`
+									)} | ${who}`,
+									getMainMenu()
 								)
 							}
 						}
@@ -1017,45 +1002,87 @@ bot.on('text', ctx => {
 		return
 	}
 
-	// Обработка в свободной форме (для обратной совместимости)
-	if (text.includes('|')) {
-		const parts = text.split('|').map(p => p.trim())
-		if (parts.length === 4) {
-			const [date, desc, amount, who] = parts
-			const amountNum = parseAmount(amount)
+	// Редактирование дохода
+	if (
+		ctx.session &&
+		ctx.session.editingIncomeId &&
+		ctx.session.waitingForIncome
+	) {
+		const incomeId = ctx.session.editingIncomeId
 
-			if (!isNaN(amountNum) && amountNum > 0) {
-				// Спрашиваем пользователя - это доход или расход?
-				ctx.reply(
-					`Это доход или расход?\n\n` +
-						`📅 ${date} | ${desc} | ${formatAmount(amountNum)} | ${who}`,
-					Markup.inlineKeyboard([
-						[
-							Markup.button.callback(
-								'📈 Доход',
-								`add_income_${date}_${desc.replace(
-									/\|/g,
-									''
-								)}_${amountNum}_${who}`
-							),
-							Markup.button.callback(
-								'📉 Расход',
-								`add_expense_${date}_${desc.replace(
-									/\|/g,
-									''
-								)}_${amountNum}_${who}`
-							),
-						],
-					])
-				)
-				return
+		if (text.includes('|')) {
+			const parts = text.split('|').map(p => p.trim())
+			if (parts.length === 4) {
+				const [date, desc, amount, who] = parts
+				const amountNum = parseAmount(amount)
+
+				if (!isNaN(amountNum) && amountNum > 0) {
+					db.run(
+						'UPDATE incomes SET date = ?, description = ?, amount = ?, who = ? WHERE id = ?',
+						[date, desc, amountNum, who, incomeId],
+						err => {
+							if (err) {
+								ctx.reply('❌ Ошибка обновления: ' + err.message)
+							} else {
+								ctx.reply(
+									`✅ Доход обновлен!\n${date} | ${desc} | ${formatAmount(
+										amountNum
+									)} | ${who}`,
+									getMainMenu()
+								)
+								delete ctx.session.editingIncomeId
+								delete ctx.session.waitingForIncome
+							}
+						}
+					)
+					return
+				} else {
+					ctx.reply('❌ Сумма должна быть положительным числом')
+				}
 			}
+		}
+		ctx.reply('❌ Неверный формат. Используйте: Дата | Источник | Сумма | Кто')
+		return
+	}
+
+	// Если пользователь вводит данные без использования кнопок меню
+	// (для обратной совместимости со старым форматом)
+	if (text.includes('|') && text.split('|').length === 4) {
+		const parts = text.split('|').map(p => p.trim())
+		const [date, desc, amount, who] = parts
+		const amountNum = parseAmount(amount)
+
+		if (!isNaN(amountNum) && amountNum > 0) {
+			// Спрашиваем пользователя - это доход или расход?
+			ctx.reply(
+				`Это доход или расход?\n\n` +
+					`📅 ${date} | ${desc} | ${formatAmount(amountNum)} | ${who}`,
+				Markup.inlineKeyboard([
+					[
+						Markup.button.callback(
+							'📈 Доход',
+							`quick_add_income_${date}_${desc.replace(
+								/\|/g,
+								''
+							)}_${amountNum}_${who}`
+						),
+						Markup.button.callback(
+							'📉 Расход',
+							`quick_add_expense_${date}_${desc.replace(
+								/\|/g,
+								''
+							)}_${amountNum}_${who}`
+						),
+					],
+				])
+			)
+			return
 		}
 	}
 })
 
-// Обработчики для инлайн-кнопок определения типа операции
-bot.action(/add_income_(.+)_(.+)_(.+)_(.+)/, ctx => {
+// Обработчики для быстрого добавления (без использования кнопок меню)
+bot.action(/quick_add_income_(.+)_(.+)_(.+)_(.+)/, ctx => {
 	const [date, desc, amount, who] = [
 		ctx.match[1],
 		ctx.match[2],
@@ -1077,12 +1104,19 @@ bot.action(/add_income_(.+)_(.+)_(.+)_(.+)/, ctx => {
 						amount
 					)} | ${who}`
 				)
+				setTimeout(() => {
+					bot.telegram.sendMessage(
+						ctx.chat.id,
+						'Выберите действие:',
+						getMainMenu()
+					)
+				}, 500)
 			}
 		}
 	)
 })
 
-bot.action(/add_expense_(.+)_(.+)_(.+)_(.+)/, ctx => {
+bot.action(/quick_add_expense_(.+)_(.+)_(.+)_(.+)/, ctx => {
 	const [date, desc, amount, who] = [
 		ctx.match[1],
 		ctx.match[2],
@@ -1096,7 +1130,6 @@ bot.action(/add_expense_(.+)_(.+)_(.+)_(.+)/, ctx => {
 	ctx.answerCbQuery()
 	ctx.editMessageText('Выберите категорию расхода:')
 
-	// Немного хак для отправки нового сообщения с клавиатурой
 	setTimeout(() => {
 		bot.telegram.sendMessage(
 			ctx.chat.id,
