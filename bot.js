@@ -62,10 +62,9 @@ function formatAmount(amount) {
 }
 function getMainMenu() {
 	return Markup.keyboard([
-		['📊 Статистика', '📋 Отчёт'],
+		['📊 Статистика по людям', '📈 Баланс'],
 		['💸 Добавить трату', '💰 Добавить доход'],
-		['✏️ Мои траты', '📈 Баланс'],
-		['✏️ Мои доходы'],
+		['✏️ Мои траты', '✏️ Мои доходы'],
 		['🔄 Сбросить меню'],
 	]).resize()
 }
@@ -105,58 +104,86 @@ bot.hears('💸 Добавить трату', ctx => {
 // Добавить доход
 bot.hears('💰 Добавить доход', ctx => {
 	ctx.reply(
-		'Введите доход в формате:\nДата | Описание | Сумма | Кто\nПример:\n27.12.2024 | Зарплата | 50000 | Кирилл',
+		'Введите доход в формате:\nДата | Описание | Сумма | Кто\nПример:\n27.12.2024 | Зарплата | 900000 | Кирилл',
 		{ parse_mode: 'HTML' }
 	)
 	ctx.session = ctx.session || {}
 	ctx.session.addingIncome = true
 })
 
-// Статистика (расходы + доходы)
-bot.hears('📊 Статистика', ctx => {
-	db.all(
-		`SELECT 'Расход' AS type, who, SUM(amount) AS total, COUNT(*) AS count FROM expenses GROUP BY who
-         UNION ALL
-         SELECT 'Доход' AS type, who, SUM(amount) AS total, COUNT(*) AS count FROM income GROUP BY who`,
-		(err, rows) => {
-			if (err) return ctx.reply('❌ Ошибка получения статистики')
-			if (!rows.length) return ctx.reply('📊 Пока нет данных')
-			let msg = '📊 <b>Статистика:</b>\n\n'
-			let totalAll = 0
-			rows.forEach(r => {
-				msg += `<b>${r.type} — ${r.who}:</b> ${formatAmount(r.total)} руб. (${
-					r.count
-				} записей)\n`
-				totalAll += r.total
-			})
-			msg += `\n💵 <b>Общий итог:</b> ${formatAmount(totalAll)} руб.`
-			ctx.reply(msg, { parse_mode: 'HTML' })
+// Статистика по людям
+bot.hears('📊 Статистика по людям', ctx => {
+	// Получаем список всех уникальных людей из обеих таблиц
+	db.all(`
+		SELECT DISTINCT who FROM (
+			SELECT who FROM expenses
+			UNION
+			SELECT who FROM income
+		) ORDER BY who
+	`, (err, people) => {
+		if (err) {
+			console.error('Ошибка получения списка людей:', err)
+			return ctx.reply('❌ Ошибка получения статистики')
 		}
-	)
-})
-
-// Отчёт (расходы + доходы)
-bot.hears('📋 Отчёт', ctx => {
-	db.all(
-		`SELECT date, description, amount, who, 'Расход' AS type FROM expenses
-         UNION ALL
-         SELECT date, description, amount, who, 'Доход' AS type FROM income
-         ORDER BY date DESC LIMIT 30`,
-		(err, rows) => {
-			if (err) return ctx.reply('❌ Ошибка получения отчёта')
-			if (!rows.length) return ctx.reply('📋 Нет записей')
-			let msg = '📋 <b>Последние записи:</b>\n\n'
-			let total = 0
-			rows.forEach(r => {
-				msg += `[${r.type}] ${r.date} | ${r.description} | ${formatAmount(
-					r.amount
-				)} руб. | ${r.who}\n`
-				total += r.amount
-			})
-			msg += `\n💵 <b>Итого:</b> ${formatAmount(total)} руб.`
-			ctx.reply(msg, { parse_mode: 'HTML' })
+		
+		if (!people.length) {
+			return ctx.reply('📊 Пока нет данных о людях')
 		}
-	)
+		
+		let msg = '📊 <b>Статистика по людям:</b>\n\n'
+		let totalExpenseAll = 0
+		let totalIncomeAll = 0
+		
+		// Для каждого человека получаем отдельно расходы и доходы
+		let processed = 0
+		
+		people.forEach(person => {
+			const who = person.who
+			
+			// Получаем расходы для этого человека
+			db.get('SELECT SUM(amount) AS total, COUNT(*) AS count FROM expenses WHERE who = ?', [who], (err, expenses) => {
+				if (err) {
+					console.error('Ошибка получения расходов для', who, ':', err)
+					expenses = { total: 0, count: 0 }
+				}
+				
+				// Получаем доходы для этого человека
+				db.get('SELECT SUM(amount) AS total, COUNT(*) AS count FROM income WHERE who = ?', [who], (err, income) => {
+					if (err) {
+						console.error('Ошибка получения доходов для', who, ':', err)
+						income = { total: 0, count: 0 }
+					}
+					
+					const expenseTotal = expenses.total || 0
+					const incomeTotal = income.total || 0
+					const personBalance = incomeTotal - expenseTotal
+					
+					msg += `<b>${who}:</b>\n`
+					msg += `  💸 Расходы: ${formatAmount(expenseTotal)} руб. (${expenses.count || 0} записей)\n`
+					msg += `  💰 Доходы: ${formatAmount(incomeTotal)} руб. (${income.count || 0} записей)\n`
+					msg += `  ${personBalance >= 0 ? '🟢' : '🔴'} Баланс: ${formatAmount(personBalance)} руб.\n\n`
+					
+					totalExpenseAll += expenseTotal
+					totalIncomeAll += incomeTotal
+					
+					processed++
+					
+					// Когда обработали всех людей, отправляем сообщение
+					if (processed === people.length) {
+						const totalBalance = totalIncomeAll - totalExpenseAll
+						
+						msg += '📈 <b>Общая статистика:</b>\n'
+						msg += `  💸 Всего расходов: ${formatAmount(totalExpenseAll)} руб.\n`
+						msg += `  💰 Всего доходов: ${formatAmount(totalIncomeAll)} руб.\n`
+						msg += `  ${totalBalance >= 0 ? '🟢' : '🔴'} Общий баланс: ${formatAmount(totalBalance)} руб.\n\n`
+						msg += `👥 Всего людей: ${people.length}`
+						
+						ctx.reply(msg, { parse_mode: 'HTML' })
+					}
+				})
+			})
+		})
+	})
 })
 
 // Мои траты
@@ -390,6 +417,12 @@ bot.action(/back_to_list_(expense|income)/, ctx => {
 	ctx.answerCbQuery()
 	if (type === 'expense') sendExpensesList(ctx)
 	else sendIncomeList(ctx)
+})
+
+// Возврат в главное меню
+bot.action('back_to_main', ctx => {
+	ctx.answerCbQuery()
+	ctx.reply('Выберите действие:', getMainMenu())
 })
 
 // Запуск
