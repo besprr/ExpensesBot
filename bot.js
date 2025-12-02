@@ -12,7 +12,8 @@ const ALLOWED_USERS = [586995184, 1319991227]
 function isUserAllowed(ctx) {
 	const userId = ctx.from.id
 	const chatId = ctx.chat.id
-	const allowed = ALLOWED_USERS.includes(userId) || ALLOWED_USERS.includes(chatId)
+	const allowed =
+		ALLOWED_USERS.includes(userId) || ALLOWED_USERS.includes(chatId)
 	if (!allowed)
 		console.log(`🚫 Доступ запрещен: User ID: ${userId}, Chat ID: ${chatId}`)
 	return allowed
@@ -123,7 +124,9 @@ bot.hears('📊 Статистика', ctx => {
 			let msg = '📊 <b>Статистика:</b>\n\n'
 			let totalAll = 0
 			rows.forEach(r => {
-				msg += `<b>${r.type} — ${r.who}:</b> ${formatAmount(r.total)} руб. (${r.count} записей)\n`
+				msg += `<b>${r.type} — ${r.who}:</b> ${formatAmount(r.total)} руб. (${
+					r.count
+				} записей)\n`
 				totalAll += r.total
 			})
 			msg += `\n💵 <b>Общий итог:</b> ${formatAmount(totalAll)} руб.`
@@ -145,7 +148,9 @@ bot.hears('📋 Отчёт', ctx => {
 			let msg = '📋 <b>Последние записи:</b>\n\n'
 			let total = 0
 			rows.forEach(r => {
-				msg += `[${r.type}] ${r.date} | ${r.description} | ${formatAmount(r.amount)} руб. | ${r.who}\n`
+				msg += `[${r.type}] ${r.date} | ${r.description} | ${formatAmount(
+					r.amount
+				)} руб. | ${r.who}\n`
 				total += r.amount
 			})
 			msg += `\n💵 <b>Итого:</b> ${formatAmount(total)} руб.`
@@ -156,36 +161,56 @@ bot.hears('📋 Отчёт', ctx => {
 
 // Мои траты
 function sendExpensesList(ctx) {
-	db.all(`SELECT * FROM expenses ORDER BY date DESC, id DESC LIMIT 10`, (err, rows) => {
-		if (err) return ctx.reply('❌ Ошибка получения списка трат')
-		if (!rows.length) return ctx.reply('✏️ Пока нет трат для редактирования')
-		let msg = '✏️ <b>Последние траты:</b>\n\n'
-		const keyboard = []
-		rows.forEach((r, i) => {
-			msg += `${i + 1}. ${r.date} | ${r.description} | ${formatAmount(r.amount)} руб. | ${r.who}\n`
-			keyboard.push([Markup.button.callback(`${r.date} - ${r.description} - ${formatAmount(r.amount)} руб.`, `select_expense_${r.id}`)])
-		})
-		keyboard.push([Markup.button.callback('⬅️ Назад', 'back_to_main')])
-		ctx.reply(msg, { parse_mode: 'HTML', ...Markup.inlineKeyboard(keyboard) })
-	})
+	db.all(
+		`SELECT * FROM expenses ORDER BY date DESC, id DESC LIMIT 10`,
+		(err, rows) => {
+			if (err) return ctx.reply('❌ Ошибка получения списка трат')
+			if (!rows.length) return ctx.reply('✏️ Пока нет трат для редактирования')
+			let msg = '✏️ <b>Последние траты:</b>\n\n'
+			const keyboard = []
+			rows.forEach((r, i) => {
+				msg += `${i + 1}. ${r.date} | ${r.description} | ${formatAmount(
+					r.amount
+				)} руб. | ${r.who}\n`
+				keyboard.push([
+					Markup.button.callback(
+						`${r.date} - ${r.description} - ${formatAmount(r.amount)} руб.`,
+						`select_expense_${r.id}`
+					),
+				])
+			})
+			keyboard.push([Markup.button.callback('⬅️ Назад', 'back_to_main')])
+			ctx.reply(msg, { parse_mode: 'HTML', ...Markup.inlineKeyboard(keyboard) })
+		}
+	)
 }
 
 bot.hears('✏️ Мои траты', sendExpensesList)
 
 // Мои доходы
 function sendIncomeList(ctx) {
-	db.all(`SELECT * FROM income ORDER BY created_at DESC LIMIT 10`, (err, rows) => {
-		if (err) return ctx.reply('❌ Ошибка получения доходов')
-		if (!rows.length) return ctx.reply('🪙 Доходов пока нет')
-		let msg = '✏️ <b>Последние доходы:</b>\n\n'
-		const keyboard = []
-		rows.forEach((r, i) => {
-			msg += `${i + 1}. ${r.date} | ${r.description} | ${formatAmount(r.amount)} руб. | ${r.who}\n`
-			keyboard.push([Markup.button.callback(`${r.date} - ${r.description} - ${formatAmount(r.amount)} руб.`, `select_income_${r.id}`)])
-		})
-		keyboard.push([Markup.button.callback('⬅️ Назад', 'back_to_main')])
-		ctx.reply(msg, { parse_mode: 'HTML', ...Markup.inlineKeyboard(keyboard) })
-	})
+	db.all(
+		`SELECT * FROM income ORDER BY created_at DESC LIMIT 10`,
+		(err, rows) => {
+			if (err) return ctx.reply('❌ Ошибка получения доходов')
+			if (!rows.length) return ctx.reply('🪙 Доходов пока нет')
+			let msg = '✏️ <b>Последние доходы:</b>\n\n'
+			const keyboard = []
+			rows.forEach((r, i) => {
+				msg += `${i + 1}. ${r.date} | ${r.description} | ${formatAmount(
+					r.amount
+				)} руб. | ${r.who}\n`
+				keyboard.push([
+					Markup.button.callback(
+						`${r.date} - ${r.description} - ${formatAmount(r.amount)} руб.`,
+						`select_income_${r.id}`
+					),
+				])
+			})
+			keyboard.push([Markup.button.callback('⬅️ Назад', 'back_to_main')])
+			ctx.reply(msg, { parse_mode: 'HTML', ...Markup.inlineKeyboard(keyboard) })
+		}
+	)
 }
 
 bot.hears('✏️ Мои доходы', sendIncomeList)
@@ -198,14 +223,17 @@ bot.hears('📈 Баланс', ctx => {
 			if (err) return ctx.reply('❌ Ошибка получения расходов')
 			const balance = (incRow.total || 0) - (expRow.total || 0)
 			ctx.reply(
-				`📈 Баланс:\n💰 Доходы: ${formatAmount(incRow.total || 0)} руб.\n💸 Расходы: ${formatAmount(expRow.total || 0)} руб.\n\n${balance >= 0 ? '🟢' : '🔴'} ИТОГО: ${formatAmount(balance)} руб.`,
+				`📈 Баланс:\n💰 Доходы: ${formatAmount(
+					incRow.total || 0
+				)} руб.\n💸 Расходы: ${formatAmount(expRow.total || 0)} руб.\n\n${
+					balance >= 0 ? '🟢' : '🔴'
+				} ИТОГО: ${formatAmount(balance)} руб.`,
 				{ parse_mode: 'HTML' }
 			)
 		})
 	})
 })
 
-// Обработка текста
 bot.on('text', ctx => {
 	const text = ctx.message.text
 	ctx.session = ctx.session || {}
@@ -214,43 +242,85 @@ bot.on('text', ctx => {
 	if (ctx.session.editing) {
 		const { type, id } = ctx.session.editing
 		const table = type === 'expense' ? 'expenses' : 'income'
-		if (!text.includes('|')) return ctx.reply('❌ Формат: Дата | На что/Описание | Сумма | Кто')
-		const [date, desc, amountStr, who] = text.split('|').map(p => p.trim())
-		const amount = parseAmount(amountStr)
-		if (isNaN(amount) || amount <= 0) return ctx.reply('❌ Сумма должна быть числом >0')
 
-		db.run(`UPDATE ${table} SET date=?, description=?, amount=?, who=? WHERE id=?`, [date, desc, amount, who, id], err => {
-			if (err) return ctx.reply('❌ Ошибка обновления: ' + err.message)
-			ctx.reply(`✅ Запись обновлена:\n${date} | ${desc} | ${formatAmount(amount)} | ${who}`)
-			delete ctx.session.editing
+		// Проверяем, существует ли запись перед обновлением
+		db.get(`SELECT * FROM ${table} WHERE id=?`, [id], (err, row) => {
+			if (err || !row) {
+				delete ctx.session.editing
+				return ctx.reply('❌ Эта запись уже удалена', getMainMenu())
+			}
+
+			if (!text.includes('|'))
+				return ctx.reply('❌ Формат: Дата | На что/Описание | Сумма | Кто')
+			const [date, desc, amountStr, who] = text.split('|').map(p => p.trim())
+			const amount = parseAmount(amountStr)
+			if (isNaN(amount) || amount <= 0)
+				return ctx.reply('❌ Сумма должна быть числом >0')
+
+			db.run(
+				`UPDATE ${table} SET date=?, description=?, amount=?, who=? WHERE id=?`,
+				[date, desc, amount, who, id],
+				err => {
+					if (err) return ctx.reply('❌ Ошибка обновления: ' + err.message)
+					ctx.reply(
+						`✅ Запись обновлена:\n${date} | ${desc} | ${formatAmount(
+							amount
+						)} | ${who}`,
+						getMainMenu()
+					)
+					delete ctx.session.editing
+				}
+			)
 		})
 		return
 	}
 
 	// Добавление расхода
 	if (ctx.session.addingExpense) {
-		if (!text.includes('|')) return ctx.reply('❌ Формат: Дата | На что | Сумма | Кто')
+		if (!text.includes('|'))
+			return ctx.reply('❌ Формат: Дата | На что | Сумма | Кто')
 		const [date, desc, amountStr, who] = text.split('|').map(p => p.trim())
 		const amount = parseAmount(amountStr)
-		if (isNaN(amount) || amount <= 0) return ctx.reply('❌ Сумма должна быть числом >0')
-		db.run('INSERT INTO expenses (date, description, amount, who) VALUES (?,?,?,?)', [date, desc, amount, who], err => {
-			if (err) return ctx.reply('❌ Ошибка добавления: ' + err.message)
-			ctx.reply(`✅ Трата добавлена:\n${date} | ${desc} | ${formatAmount(amount)} | ${who}`)
-		})
+		if (isNaN(amount) || amount <= 0)
+			return ctx.reply('❌ Сумма должна быть числом >0')
+		db.run(
+			'INSERT INTO expenses (date, description, amount, who) VALUES (?,?,?,?)',
+			[date, desc, amount, who],
+			err => {
+				if (err) return ctx.reply('❌ Ошибка добавления: ' + err.message)
+				ctx.reply(
+					`✅ Трата добавлена:\n${date} | ${desc} | ${formatAmount(
+						amount
+					)} | ${who}`,
+					getMainMenu()
+				)
+			}
+		)
 		delete ctx.session.addingExpense
 		return
 	}
 
 	// Добавление дохода
 	if (ctx.session.addingIncome) {
-		if (!text.includes('|')) return ctx.reply('❌ Формат: Дата | Описание | Сумма | Кто')
+		if (!text.includes('|'))
+			return ctx.reply('❌ Формат: Дата | Описание | Сумма | Кто')
 		const [date, desc, amountStr, who] = text.split('|').map(p => p.trim())
 		const amount = parseAmount(amountStr)
-		if (isNaN(amount) || amount <= 0) return ctx.reply('❌ Сумма должна быть числом >0')
-		db.run('INSERT INTO income (date, description, amount, who) VALUES (?,?,?,?)', [date, desc, amount, who], err => {
-			if (err) return ctx.reply('❌ Ошибка добавления: ' + err.message)
-			ctx.reply(`✅ Доход добавлен:\n${date} | ${desc} | ${formatAmount(amount)} | ${who}`)
-		})
+		if (isNaN(amount) || amount <= 0)
+			return ctx.reply('❌ Сумма должна быть числом >0')
+		db.run(
+			'INSERT INTO income (date, description, amount, who) VALUES (?,?,?,?)',
+			[date, desc, amount, who],
+			err => {
+				if (err) return ctx.reply('❌ Ошибка добавления: ' + err.message)
+				ctx.reply(
+					`✅ Доход добавлен:\n${date} | ${desc} | ${formatAmount(
+						amount
+					)} | ${who}`,
+					getMainMenu()
+				)
+			}
+		)
 		delete ctx.session.addingIncome
 		return
 	}
@@ -262,7 +332,13 @@ bot.action(/select_(expense|income)_(\d+)/, ctx => {
 	const table = type === 'expense' ? 'expenses' : 'income'
 	db.get(`SELECT * FROM ${table} WHERE id=?`, [id], (err, row) => {
 		if (err || !row) return ctx.answerCbQuery('❌ Запись не найдена')
-		const msg = `✏️ <b>Редактирование ${type === 'expense' ? 'траты' : 'дохода'}:</b>\n\n<b>Дата:</b> ${row.date}\n<b>Описание:</b> ${row.description}\n<b>Сумма:</b> ${formatAmount(row.amount)} руб.\n<b>Кто:</b> ${row.who}\n\nВыберите действие:`
+		const msg = `✏️ <b>Редактирование ${
+			type === 'expense' ? 'траты' : 'дохода'
+		}:</b>\n\n<b>Дата:</b> ${row.date}\n<b>Описание:</b> ${
+			row.description
+		}\n<b>Сумма:</b> ${formatAmount(row.amount)} руб.\n<b>Кто:</b> ${
+			row.who
+		}\n\nВыберите действие:`
 		ctx.editMessageText(msg, { parse_mode: 'HTML', ...getEditMenu(type, id) })
 	})
 })
@@ -272,19 +348,43 @@ bot.action(/edit_(expense|income)_(\d+)/, ctx => {
 	ctx.session = ctx.session || {}
 	ctx.session.editing = { type, id }
 	ctx.answerCbQuery()
-	ctx.reply(`Введите новые данные в формате:\nДата | На что/Описание | Сумма | Кто`, { parse_mode: 'HTML', ...Markup.removeKeyboard() })
+	ctx.reply(
+		`Введите новые данные в формате:\nДата | На что/Описание | Сумма | Кто`,
+		{ parse_mode: 'HTML', ...Markup.removeKeyboard() }
+	)
 })
 
 bot.action(/delete_(expense|income)_(\d+)/, ctx => {
 	const [_, type, id] = ctx.match
 	const table = type === 'expense' ? 'expenses' : 'income'
-	db.run(`DELETE FROM ${table} WHERE id=?`, [id], function(err) {
+	db.run(`DELETE FROM ${table} WHERE id=?`, [id], function (err) {
 		if (err) return ctx.answerCbQuery('❌ Ошибка при удалении')
 		ctx.answerCbQuery('✅ Удалено')
-		ctx.editMessageText('✅ Запись удалена', { reply_markup: { inline_keyboard: [[{ text: '⬅️ Назад к списку', callback_data: `back_to_list_${type}` }]] } })
+		// Очистка сессии редактирования, если удаляем именно эту запись
+		if (
+			ctx.session &&
+			ctx.session.editing &&
+			ctx.session.editing.type === type &&
+			ctx.session.editing.id == id
+		) {
+			delete ctx.session.editing
+		}
+		ctx.editMessageText('✅ Запись удалена', {
+			reply_markup: {
+				inline_keyboard: [
+					[
+						{
+							text: '⬅️ Назад к списку',
+							callback_data: `back_to_list_${type}`,
+						},
+					],
+				],
+			},
+		})
 	})
 })
 
+// Возврат к списку после редактирования/удаления
 bot.action(/back_to_list_(expense|income)/, ctx => {
 	const [_, type] = ctx.match
 	ctx.answerCbQuery()
